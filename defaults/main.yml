@@ -1,0 +1,10 @@
+---
+foreman_provisioning_dhcp_interface: "{{ ansible_default_ipv4.interface }}"
+foreman_provisioning_dhcp_gateway: "{{ ansible_default_ipv4.gateway }}"
+foreman_provisioning_dhcp_network: "{{ ansible_default_ipv4.network }}"
+foreman_provisioning_dhcp_netmask: "{{ ansible_default_ipv4.netmask }}"
+foreman_provisioning_domain: "{{ ansible_dns.search[0] }}"
+foreman_provisioning_dhcp_dns_primary: "{{ ansible_dns.nameservers[0] }}"
+foreman_provisioning_proxy_name: "{{ ansible_fqdn }}"
+foreman_ipam: "DHCP"
+configure_subnet: True

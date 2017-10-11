@@ -1,0 +1,89 @@
+---
+- name: 'Calculate netmask'
+  set_fact:
+    net_mask: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}"
+  when: foreman_provisioning_dhcp_network_prefix is undefined
+
+- name: 'Calculate network prefix'
+  set_fact:
+    foreman_provisioning_dhcp_network_prefix: "{{ net_mask | ipaddr('prefix') }}"
+    foreman_provisioning_dhcp_network_subnet: "{{ net_mask | ipaddr('net') }}"
+  when: foreman_provisioning_dhcp_network_prefix is undefined
+
+- name: Extract the last octet of proxies address, increment it and store it
+  set_fact: 
+    foreman_provisioning_dhcp_start_octet={{ ansible_default_ipv4.address.split('.')[3] | int + 1 }}
+
+- name: Append the incremented octet to the first 3 octets to create foreman_provisioning_dhcp_start
+  set_fact: 
+    foreman_provisioning_dhcp_start="{{ ansible_default_ipv4.address | regex_replace('(^.*\.).*$', '\\1') }}{{ foreman_provisioning_dhcp_start_octet }}"
+
+- name: 'Calculate last ip in host/prefix'
+  set_fact:
+#    foreman_provisioning_dhcp_start: "{{ foreman_provisioning_dhcp_network_subnet | ipaddr('0') }}"
+    foreman_provisioning_dhcp_end: "{{ foreman_provisioning_dhcp_network_subnet | ipaddr('-2') }}"
+
+- name: 'Extract last ip'
+  set_fact:
+#    foreman_provisioning_dhcp_start: "{{ foreman_provisioning_dhcp_start.split('/')[0] }}"
+    foreman_provisioning_dhcp_end: "{{ foreman_provisioning_dhcp_end.split('/')[0] }}"
+
+- debug:
+    msg: 
+      - "Interface {{ foreman_provisioning_dhcp_interface }}"
+      - "Network {{ foreman_provisioning_dhcp_network_subnet }}"
+      - "Gateway {{ foreman_provisioning_dhcp_gateway }}"
+      - "First ip {{ foreman_provisioning_dhcp_start }}"
+      - "Last last ip {{ foreman_provisioning_dhcp_end }}"
+      - "Nameservers {{ ansible_dns.nameservers | join(', ') }}"
+
+- name: 'Install foreman and enable provisioning'
+  shell: >
+    foreman-installer
+    --foreman-proxy-tftp=true
+    --foreman-proxy-dhcp=true
+    --foreman-proxy-dhcp-interface={{ foreman_provisioning_dhcp_interface }}
+    --foreman-proxy-dhcp-gateway={{ foreman_provisioning_dhcp_gateway }}
+    --foreman-proxy-dhcp-range="{{ foreman_provisioning_dhcp_start }} {{ foreman_provisioning_dhcp_end }}"
+    --foreman-proxy-dhcp-nameservers={{ ansible_dns.nameservers | join(' --foreman-proxy-dhcp-nameservers=') }}
+
+- name: 'restart foreman-proxy'
+  service: name=foreman-proxy state=restarted
+
+- name: 'Get smart proxy id'
+  shell: >
+    hammer --output json proxy info --name {{ foreman_provisioning_proxy_name }}
+  register: foreman_provisioning_smart_proxy_json
+  when: configure_subnet
+  delegate_to: "{{ hammer_client_host }}"
+
+- name: 'Set smart proxy id'
+  set_fact:
+    foreman_provisioning_smart_proxy_json: "{{ foreman_provisioning_smart_proxy_json.stdout | from_json }}"
+  when: configure_subnet
+  delegate_to: "{{ hammer_client_host }}"
+
+- name: 'Find subnet'
+  shell: >
+    hammer subnet info --name "{{ foreman_provisioning_dhcp_network }}/{{ foreman_provisioning_dhcp_network_prefix }}"
+  register: foreman_provisioning_subnet_return
+  ignore_errors: True
+  when: configure_subnet
+  delegate_to: "{{ hammer_client_host }}"
+
+- name: 'Create subnet'
+  shell: >
+    hammer subnet create
+    --name "{{ foreman_provisioning_dhcp_network }}/{{ foreman_provisioning_dhcp_network_prefix }}"
+    --dhcp-id {{ foreman_provisioning_smart_proxy_json.Id }}
+    --tftp-id {{ foreman_provisioning_smart_proxy_json.Id }}
+    --from {{ foreman_provisioning_dhcp_start }}
+    --to {{ foreman_provisioning_dhcp_end }}
+    --network {{ foreman_provisioning_dhcp_network }}
+    --mask {{ foreman_provisioning_dhcp_netmask }}
+    --ipam "{{ foreman_ipam }}"
+    --gateway {{ foreman_provisioning_dhcp_gateway }}
+    --domains {{ foreman_provisioning_domain }}
+    --dns-primary {{ foreman_provisioning_dhcp_dns_primary }}
+  when: foreman_provisioning_subnet_return.stderr.find('not found') != -1 and configure_subnet
+  delegate_to: "{{ hammer_client_host }}"

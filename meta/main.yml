@@ -1,0 +1,33 @@
+galaxy_info:
+  author: Genadi Postrilko
+  description: The role configures provisioning proxy via foreman-installer and creates foreman subnet
+  issue_tracker_url: https://github.com/genadipost/foreman_proxy_provisioning/issues
+  license: BSD
+  min_ansible_version: 2.3
+  github_branch: master
+  platforms:
+  - name: Fedora
+    versions:
+      - 25
+      - 26
+  - name: EL
+    versions:
+      - 7
+  galaxy_tags:
+    - theforeman
+    - foreman
+    - satellite
+    - satellite6
+    - sat6
+    - foreman-installer
+    - proxy
+    - provisioning
+    - dhcp
+    - tftp
+    - kickstart
+    - subnet
+dependencies: 
+  - genadipost.epel_repositories
+  - genadipost.puppet_repositories
+  - genadipost.foreman_repositories
+  - genadipost.foreman_installer
